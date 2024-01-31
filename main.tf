@@ -8,16 +8,6 @@ resource "google_compute_subnetwork" "subnet" {
   ip_cidr_range = "10.0.1.0/24"
   region        = var.region
   network       = google_compute_network.vpc_network.name
-
-  secondary_ip_range {
-    range_name    = "pod-ranges"
-    ip_cidr_range = "192.168.64.0/22"
-  }
-
-  secondary_ip_range {
-    range_name    = "services-range"
-    ip_cidr_range = "192.168.1.0/24"
-  }
 }
 
 resource "google_container_cluster" "gke_cluster" {
@@ -31,11 +21,6 @@ resource "google_container_cluster" "gke_cluster" {
   initial_node_count       = 1
 
   deletion_protection = false
-
-  ip_allocation_policy {
-    cluster_secondary_range_name  = google_compute_subnetwork.subnet.secondary_ip_range[0].range_name
-    services_secondary_range_name = google_compute_subnetwork.subnet.secondary_ip_range[1].range_name
-  }
 }
 
 resource "google_container_node_pool" "node_pool" {
