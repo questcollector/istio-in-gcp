@@ -7,11 +7,12 @@ on:
         type: choice
         description: choose terraform stage as apply, destroy or only plan
         required: true
-        default: 'only plan'
+        default: 'only plan - apply'
         options: 
         - apply
         - destroy
-        - only plan
+        - 'only plan - apply'
+        - 'only plan - destroy'
 
 permissions:
   contents: read
@@ -59,8 +60,12 @@ jobs:
       run: terraform fmt -check
 
     # Generates an execution plan for Terraform
-    - name: Terraform Plan
+    - name: Terraform Plan (apply)
+      if: ${{ endswith(github.event.inputs.stage, 'apply') }}
       run: terraform plan -input=false
+    - name: Terraform Plan (destroy)
+      if: ${{ endswith(github.event.inputs.stage, 'destroy') }}
+      run: terraform plan -destroy -input=false
 
       # Note: It is recommended to set up a required "strict" status check in your repository for "Terraform Cloud". See the documentation on "strict" required status checks for more information: https://help.github.com/en/github/administering-a-repository/types-of-required-status-checks
     - name: Terraform Apply
