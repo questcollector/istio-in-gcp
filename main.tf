@@ -32,7 +32,7 @@ resource "google_container_node_pool" "node_pool" {
   node_config {
     preemptible  = true
     machine_type = var.gke_node_machine_type
-    disk_size_gb = 10
+    disk_size_gb = 30
   }
 
   autoscaling {
