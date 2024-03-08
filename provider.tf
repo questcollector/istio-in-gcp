@@ -5,7 +5,7 @@ provider "google" {
 
 terraform {
   backend "gcs" {
-    bucket = "<<terraform_state_bucket_name>>"
+    bucket = "kiyoung-terraform-state"
     prefix = "terraform/state"
   }
 }
