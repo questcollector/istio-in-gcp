@@ -45,41 +45,80 @@ resource "google_container_node_pool" "node_pool" {
 }
 
 ##### CLOUD SQL #####
-resource "random_password" "db_password" {
-  length           = 12
-  special          = true
-  override_special = "!#$%&*"
+
+provider "google-beta" {
+  region = "us-west1"
+  zone   = "us-west1-b"
+}
+resource "google_compute_global_address" "private_ip_address" {
+  provider = google-beta
+  name          = "db-ip-address"
+  purpose       = "VPC_PEERING"
+  address_type  = "INTERNAL"
+  prefix_length = 16
+  network       = google_compute_network.vpc_network.id
+}
+
+resource "google_service_networking_connection" "private_vpc_connection" {
+  provider = google-beta
+  network                 = google_compute_network.vpc_network.id
+  service                 = "servicenetworking.googleapis.com"
+  depends_on = [ google_compute_global_address.private_ip_address ]
+  reserved_peering_ranges = [google_compute_global_address.private_ip_address.name]
 }
 resource "google_sql_database_instance" "kubeflow_db" {
+  provider = google-beta
   name             = "kubeflow-database-instance"
-  region           = "us-west1"
+  region           = var.region
   database_version = "MYSQL_8_0"
+  depends_on = [google_service_networking_connection.private_vpc_connection]
   settings {
     tier = "db-f1-micro"
     ip_configuration {
       ipv4_enabled    = "false"
-      private_network = google_compute_network.vpc_network.id
+      private_network                               = google_compute_network.vpc_network.id
+      enable_private_path_for_google_cloud_services = true
     }
   }
 
   deletion_protection = "false"
 }
 
-resource "google_sql_user" "users" {
-  name     = "kubeflow"
+resource "google_sql_user" "pipeline_user" {
+  name     = "pipeline"
   instance = google_sql_database_instance.kubeflow_db.name
   host     = "%"
-  password = random_password.db_password.result
+  password = "pipeline"
 }
-
-##### CLOUD STORAGE BUCKET #####
-resource "random_string" "random" {
-  length  = 10
-  special = false
-  upper   = false
+resource "google_sql_database" "pipeline_database" {
+  name     = "mlpipeline"
+  instance = google_sql_database_instance.kubeflow_db.name
 }
-resource "google_storage_bucket" "kubeflow_bucket" {
-  name          = "kubeflow-bucket-${random_string.random.result}"
-  location      = "US-WEST1"
-  force_destroy = true
+resource "google_sql_database" "cache_database" {
+  name     = "cachedb"
+  instance = google_sql_database_instance.kubeflow_db.name
+}
+resource "google_sql_database" "meta_database" {
+  name     = "metadb"
+  instance = google_sql_database_instance.kubeflow_db.name
+}
+resource "google_sql_user" "katib_user" {
+  name     = "katib"
+  instance = google_sql_database_instance.kubeflow_db.name
+  host     = "%"
+  password = "katib"
+}
+resource "google_sql_database" "katib_database" {
+  name     = "katib"
+  instance = google_sql_database_instance.kubeflow_db.name
+}
+resource "google_sql_user" "mlflow_user" {
+  name     = "mlflow"
+  instance = google_sql_database_instance.kubeflow_db.name
+  host     = "%"
+  password = "mlflow"
+}
+resource "google_sql_database" "mlflow_database" {
+  name     = "mlflow"
+  instance = google_sql_database_instance.kubeflow_db.name
 }
