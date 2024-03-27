@@ -8,6 +8,24 @@ resource "google_compute_subnetwork" "subnet" {
   ip_cidr_range = "10.0.1.0/24"
   region        = var.region
   network       = google_compute_network.vpc_network.name
+
+  secondary_ip_range {
+    range_name    = "services-range"
+    ip_cidr_range = "10.105.176.0/20"
+  }
+
+  secondary_ip_range {
+    range_name    = "pod-ranges"
+    ip_cidr_range = "10.128.0.0/14"
+  }
+}
+
+resource "google_compute_global_address" "kubeflow_ip" {
+  name = "kubeflow-ingress-ip"
+}
+
+resource "google_compute_global_address" "mlflow_ip" {
+  name = "mlflow-ingress-ip"
 }
 
 ##### GKE CLUSTER #####
@@ -23,6 +41,11 @@ resource "google_container_cluster" "gke_cluster" {
   initial_node_count       = 1
 
   deletion_protection = false
+
+  ip_allocation_policy {
+    services_secondary_range_name = google_compute_subnetwork.subnet.secondary_ip_range.0.range_name
+    cluster_secondary_range_name  = google_compute_subnetwork.subnet.secondary_ip_range.1.range_name
+  }
 }
 
 resource "google_container_node_pool" "node_pool" {
@@ -34,7 +57,7 @@ resource "google_container_node_pool" "node_pool" {
   node_config {
     preemptible  = true
     machine_type = var.gke_node_machine_type
-    disk_size_gb = 30
+    disk_size_gb = 50
   }
 
   autoscaling {
@@ -46,12 +69,8 @@ resource "google_container_node_pool" "node_pool" {
 
 ##### CLOUD SQL #####
 
-provider "google-beta" {
-  region = "us-west1"
-  zone   = "us-west1-b"
-}
 resource "google_compute_global_address" "private_ip_address" {
-  provider = google-beta
+  address       = "10.175.0.0"
   name          = "db-ip-address"
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
@@ -60,22 +79,20 @@ resource "google_compute_global_address" "private_ip_address" {
 }
 
 resource "google_service_networking_connection" "private_vpc_connection" {
-  provider = google-beta
   network                 = google_compute_network.vpc_network.id
   service                 = "servicenetworking.googleapis.com"
-  depends_on = [ google_compute_global_address.private_ip_address ]
+  depends_on              = [google_compute_global_address.private_ip_address]
   reserved_peering_ranges = [google_compute_global_address.private_ip_address.name]
 }
 resource "google_sql_database_instance" "kubeflow_db" {
-  provider = google-beta
   name             = "kubeflow-database-instance"
   region           = var.region
   database_version = "MYSQL_8_0"
-  depends_on = [google_service_networking_connection.private_vpc_connection]
+  depends_on       = [google_service_networking_connection.private_vpc_connection]
   settings {
     tier = "db-f1-micro"
     ip_configuration {
-      ipv4_enabled    = "false"
+      ipv4_enabled                                  = "false"
       private_network                               = google_compute_network.vpc_network.id
       enable_private_path_for_google_cloud_services = true
     }
